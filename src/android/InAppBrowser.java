@@ -69,6 +69,9 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.StringTokenizer;
 
+import android.webkit.SslErrorHandler;
+import android.net.http.SslError;
+
 @SuppressLint("SetJavaScriptEnabled")
 public class InAppBrowser extends CordovaPlugin {
 
@@ -78,6 +81,7 @@ public class InAppBrowser extends CordovaPlugin {
     private static final String SYSTEM = "_system";
     private static final String EXIT_EVENT = "exit";
     private static final String LOCATION = "location";
+    private static final String IGNORE_SSL_ERROR = "ignoresslerror";
     private static final String ZOOM = "zoom";
     private static final String HIDDEN = "hidden";
     private static final String LOAD_START_EVENT = "loadstart";
@@ -99,6 +103,7 @@ public class InAppBrowser extends CordovaPlugin {
     private boolean clearSessionCache = false;
     private boolean hadwareBackButton = true;
     private boolean mediaPlaybackRequiresUserGesture = false;
+    private boolean ignoreSSLError = false;
 
     /**
      * Executes the request and returns PluginResult.
@@ -326,8 +331,14 @@ public class InAppBrowser extends CordovaPlugin {
                 option = new StringTokenizer(features.nextToken(), "=");
                 if (option.hasMoreElements()) {
                     String key = option.nextToken();
-                    Boolean value = option.nextToken().equals("no") ? Boolean.FALSE : Boolean.TRUE;
-                    map.put(key, value);
+                    if(key.equalsIgnoreCase(IGNORE_SSL_ERROR)) {
+                        Boolean value = option.nextToken().equals("no") ? Boolean.FALSE : Boolean.TRUE;
+                        map.put(key, value);
+                    } else {
+                        Boolean value = option.nextToken().equals("no") ? Boolean.FALSE : Boolean.TRUE;
+                        map.put(key, value);                      
+                    }   
+
                 }
             }
             return map;
@@ -476,12 +487,17 @@ public class InAppBrowser extends CordovaPlugin {
         showLocationBar = true;
         showZoomControls = true;
         openWindowHidden = false;
+        ignoreSSLError = false;
         mediaPlaybackRequiresUserGesture = false;
 
         if (features != null) {
             Boolean show = features.get(LOCATION);
             if (show != null) {
                 showLocationBar = show.booleanValue();
+            }
+            Boolean sslError = features.get(IGNORE_SSL_ERROR);
+            if (sslError != null) {
+                ignoreSSLError = sslError.booleanValue();
             }
             Boolean zoom = features.get(ZOOM);
             if (zoom != null) {
@@ -656,6 +672,9 @@ public class InAppBrowser extends CordovaPlugin {
                 inAppWebView.setId(Integer.valueOf(6));
                 inAppWebView.setWebChromeClient(new InAppChromeClient(thatWebView));
                 WebViewClient client = new InAppBrowserClient(thatWebView, edittext);
+
+                ((InAppBrowserClient) client).setSSLErrorFlag(ignoreSSLError);
+
                 inAppWebView.setWebViewClient(client);
                 WebSettings settings = inAppWebView.getSettings();
                 settings.setJavaScriptEnabled(true);
@@ -697,6 +716,8 @@ public class InAppBrowser extends CordovaPlugin {
                 inAppWebView.setId(Integer.valueOf(6));
                 inAppWebView.getSettings().setLoadWithOverviewMode(true);
                 inAppWebView.getSettings().setUseWideViewPort(true);
+                inAppWebView.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
+                inAppWebView.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
                 inAppWebView.requestFocus();
                 inAppWebView.requestFocusFromTouch();
 
@@ -769,6 +790,8 @@ public class InAppBrowser extends CordovaPlugin {
     public class InAppBrowserClient extends WebViewClient {
         EditText edittext;
         CordovaWebView webView;
+
+        boolean ignoreSSLError = false;
 
         /**
          * Constructor.
@@ -906,8 +929,9 @@ public class InAppBrowser extends CordovaPlugin {
         }
 
         public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-            super.onReceivedError(view, errorCode, description, failingUrl);
+            //super.onReceivedError(view, errorCode, description, failingUrl);
 
+/*
             try {
                 JSONObject obj = new JSONObject();
                 obj.put("type", LOAD_ERROR_EVENT);
@@ -919,6 +943,22 @@ public class InAppBrowser extends CordovaPlugin {
             } catch (JSONException ex) {
                 Log.d(LOG_TAG, "Should never happen");
             }
+
+            */
+        }
+
+        public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+            if(this.ignoreSSLError) {
+                handler.proceed();
+                return;
+            } else {
+                super.onReceivedSslError(view, handler, error);
+            }
+
+        }
+
+        public void setSSLErrorFlag(boolean flag) {
+            this.ignoreSSLError = flag;
         }
 
         /**
